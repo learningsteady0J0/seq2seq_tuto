@@ -19,21 +19,21 @@ EOS_token = 1
 class Lang:
     def __init__(self, name):
         self.name = name
-        self.word2index = {}
-        self.word2count = {}
+        self.word2index = {}  # 단어에 대한 인덱스 (정수값)
+        self.word2count = {}  # 데이터셋에서 해당 단어의 총 개수
         self.index2word = {0: "SOS", 1: "EOS"}
-        self.n_words = 2  # Count SOS and EOS
+        self.n_words = 2  # Count SOS and EOS // 워드 인덱스는 2부터 시작함미다
 
     def addSentence(self, sentence):
         for word in sentence.split(' '):
             self.addWord(word)
 
     def addWord(self, word):
-        if word not in self.word2index:
-            self.word2index[word] = self.n_words
-            self.word2count[word] = 1
-            self.index2word[self.n_words] = word
-            self.n_words += 1
+        if word not in self.word2index: # 인덱스에 포함되어 있지 않으면
+            self.word2index[word] = self.n_words # 정수값 부여하고
+            self.word2count[word] = 1 # 개수 증가시키고
+            self.index2word[self.n_words] = word # 딕셔너리 만들고
+            self.n_words += 1 
         else:
             self.word2count[word] += 1
 
@@ -59,10 +59,10 @@ def readLangs(lang1, lang2, reverse=False):
 
     # Read the file and split into lines
     lines = open('data/%s-%s.txt' % (lang1, lang2), encoding='utf-8').\
-        read().strip().split('\n')
+        read().strip().split('\n') # 각 line들 불러오기
 
     # Split every line into pairs and normalize
-    pairs = [[normalizeString(s) for s in l.split('\t')] for l in lines]
+    pairs = [[normalizeString(s) for s in l.split('\t')] for l in lines] # pair에 대한 리스트 [ [i am, 뭐시기 ] , [you, 뭐시기 ] ... ]
 
     # Reverse pairs, make Lang instances
     if reverse:
@@ -91,11 +91,11 @@ eng_prefixes = (
 def filterPair(p):
     return len(p[0].split(' ')) < MAX_LENGTH and \
         len(p[1].split(' ')) < MAX_LENGTH and \
-        p[1].startswith(eng_prefixes) # does this sentence start with eng_prefixes?
+        p[1].startswith(eng_prefixes) # 이 문장이 prefixes로 시작하면 true 아니면 Flase, p는 pair 값들 (ex) p[0]은 영어, p[1]은 프랑스)
 
 
 def filterPairs(pairs):
-    return [pair for pair in pairs if filterPair(pair)]
+    return [pair for pair in pairs if filterPair(pair)] # 데이터수를 줄이기 위해 특정 문장들만 고름
 
 def prepareData(lang1, lang2, reverse=False):
     input_lang, output_lang, pairs = readLangs(lang1, lang2, reverse)
@@ -132,28 +132,7 @@ class EncoderRNN(nn.Module):
         return output, hidden
 
     def initHidden(self):
-        return torch.zeros(1, 1, self.hidden_size, device=device)
-
-
-class DecoderRNN(nn.Module):
-    def __init__(self, hidden_size, output_size):
-        super(DecoderRNN, self).__init__()
-        self.hidden_size = hidden_size
-
-        self.embedding = nn.Embedding(output_size, hidden_size)
-        self.gru = nn.GRU(hidden_size, hidden_size)
-        self.out = nn.Linear(hidden_size, output_size)
-        self.softmax = nn.LogSoftmax(dim=1)
-
-    def forward(self, input, hidden):
-        output = self.embedding(input).view(1, 1, -1)
-        output = F.relu(output)
-        output, hidden = self.gru(output, hidden)
-        output = self.softmax(self.out(output[0]))
-        return output, hidden
-
-    def initHidden(self):
-        return torch.zeros(1, 1, self.hidden_size, device=device)
+        return torch.zeros(1, 1, self.hidden_size, device=device) # [[[hidden_size개수만큼 0으로 초기화]]]
 
 class AttnDecoderRNN(nn.Module):
     def __init__(self, hidden_size, output_size, dropout_p=0.1, max_length=MAX_LENGTH):
@@ -193,25 +172,24 @@ class AttnDecoderRNN(nn.Module):
 
 
 def indexesFromSentence(lang, sentence):
-    return [lang.word2index[word] for word in sentence.split(' ')]
+    return [lang.word2index[word] for word in sentence.split(' ')] # 문장에 들어있는 단어들의 index 리스트
 
 
 def tensorFromSentence(lang, sentence):
     indexes = indexesFromSentence(lang, sentence)
-    indexes.append(EOS_token)
+    indexes.append(EOS_token) # EOS_token은 끝 토큰으로 값이 1임. 즉 끝을 표현하기 위해 추가.
     return torch.tensor(indexes, dtype=torch.long, device=device).view(-1, 1)
 
 
 def tensorsFromPair(pair):
     input_tensor = tensorFromSentence(input_lang, pair[0])
     target_tensor = tensorFromSentence(output_lang, pair[1])
-    return (input_tensor, target_tensor)
+    return (input_tensor, target_tensor) # 각 문장에서 단어 인덱스들의 텐서값 반환.
 
-teacher_forcing_ratio = 0.5
-
+teacher_forcing_ratio = 0.5 # 교사 강제 비율
 
 def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, max_length=MAX_LENGTH):
-    encoder_hidden = encoder.initHidden()
+    encoder_hidden = encoder.initHidden() # 0으로 초기화
 
     encoder_optimizer.zero_grad()
     decoder_optimizer.zero_grad()
@@ -219,11 +197,11 @@ def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, deco
     input_length = input_tensor.size(0)
     target_length = target_tensor.size(0)
 
-    encoder_outputs = torch.zeros(max_length, encoder.hidden_size, device=device)
+    encoder_outputs = torch.zeros(max_length, encoder.hidden_size, device=device) 
 
     loss = 0
 
-    for ei in range(input_length):
+    for ei in range(input_length): # 각 단어들을 인풋으로 넣음.
         encoder_output, encoder_hidden = encoder(
             input_tensor[ei], encoder_hidden)
         encoder_outputs[ei] = encoder_output[0, 0]
@@ -278,6 +256,8 @@ def timeSince(since, percent):
     es = s / (percent)
     rs = es - s
     return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
+
+ 
 
 def trainIters(encoder, decoder, n_iters, print_every=1000, plot_every=100, learning_rate=0.01):
     start = time.time()
